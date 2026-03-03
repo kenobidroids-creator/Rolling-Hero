@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dice Roguelike Prototype</title>
+    <style>
+        :root { --bg: #1a1a2e; --panel: #16213e; --accent: #e94560; --text: #ffffff; }
+        body { 
+    font-family: sans-serif; 
+    background: var(--bg); 
+    color: var(--text); 
+    margin: 0; 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; /* Centers everything horizontally */
+    min-height: 100vh;
+    padding: 10px;
+    box-sizing: border-box;
+}
+        
+        /* Responsive Board Layout */
+        #board {
+    display: grid;
+    /* Columns/Rows are set by JS */
+    gap: 4px;
+    width: 95vw; /* Takes up most of the width on mobile */
+    max-width: 450px; /* Limits size on desktop */
+    max-height: 80vw; /* Prevents board from being taller than the screen width */
+    aspect-ratio: 1 / 1;
+    margin: 15px auto; /* "auto" centers it within the flex container */
+}
+
+        .tile {
+    background: var(--panel);
+    border: 1px solid #0f3460; /* Thinner border for small screens */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(0.6rem, 2vw, 1.2rem); /* Dynamically scales text */
+    position: relative;
+    border-radius: 4px;
+}
+
+.player-token {
+    width: 60%; /* Scales relative to the tile size */
+    height: 60%;
+    background: var(--accent);
+    border-radius: 50%;
+    position: absolute;
+    box-shadow: 0 0 8px var(--accent);
+    transition: all 0.2s ease;
+}
+
+        .active-tile { border-color: var(--accent); }
+
+        /* UI Panels */
+        #ui {
+    width: 100%;
+    max-width: 450px; /* Matches board width for a clean vertical line */
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+        .stats-panel {
+    background: var(--panel);
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid #0f3460;
+}
+
+.stat-box { text-align: center; margin-bottom: 10px; }
+.hp-bar-container {
+    width: 100%;
+    height: 20px;
+    background: #1a1a2e;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 5px 0;
+    border: 1px solid #333;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    font-size: 0.9rem;
+    color: #ccc;
+}
+
+button#roll-btn {
+    width: 100%;
+    height: 60px;
+    font-weight: bold;
+    box-shadow: 0 4px 0 #a32a41;
+}
+
+button#roll-btn:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #a32a41;
+}
+        button { 
+            background: var(--accent); color: white; border: none; 
+            padding: 15px 30px; font-size: 1.2rem; border-radius: 5px; cursor: pointer;
+        }
+        button:active { transform: scale(0.95); }
+        #log { margin-top: 10px; font-style: italic; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div class="stats-panel">
+            <div class="stat-box">
+                <span class="label">HEALTH</span>
+                <div class="hp-bar-container">
+                    <div id="board-hp-bar" style="width: 100%; height: 100%; background: #4ecca3; transition: width 0.3s;"></div>
+                </div>
+                <span id="board-hp-text">100 / 100</span>
+            </div>
+
+            <div class="stats-grid">
+                <span>Floor: <b id="stat-floor">1</b></span>
+                <span>Lap: <b id="stat-lap">0/3</b></span>
+                <span>Gold: <b id="stat-gold">0</b></span>
+                <span>ATK: <b id="stat-atk">10</b></span>
+                <span>DEF: <b id="stat-def">0</b></span> <span>DODGE: <b id="stat-dodge">0%</b></span>
+            </div>
+        </div>
+
+    <div id="board">
+        </div>
+
+        <button id="roll-btn" onclick="playTurn()">ROLL DICE</button>
+        <div id="log">Welcome, Adventurer!</div>
+        <button id="reset-btn" onclick="SaveManager.resetGame()" style="margin-top: 10px; background: #555; font-size: 0.7rem; padding: 5px;">RESET PROGRESS</button>
+    </div>
+
+        <div id="battle-screen" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(10, 10, 25, 0.95); flex-direction:column; align-items:center; justify-content:center; z-index:100; color: white;">
+    <h2 id="enemy-name" style="color: var(--accent); letter-spacing: 2px;">ENCOUNTER!</h2>
+    
+    <div style="width: 80%; margin-bottom: 30px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom: 5px;">
+            <span>Enemy</span> <span id="e-hp-text">20/20</span>
+        </div>
+        <div style="width:100%; height:15px; background:#333; border-radius:10px; overflow:hidden;">
+            <div id="e-hp-bar" style="width:100%; height:100%; background:#e94560; transition: width 0.3s;"></div>
+        </div>
+    </div>
+
+    <div style="font-size: 2rem; margin: 10px;">VS</div>
+
+    <div style="width: 80%; margin-top: 30px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom: 5px;">
+            <span>Hero</span> <span id="p-hp-text">100/100</span>
+        </div>
+        <div style="width:100%; height:15px; background:#333; border-radius:10px; overflow:hidden;">
+            <div id="p-hp-bar" style="width:100%; height:100%; background:#4ecca3; transition: width 0.3s;"></div>
+        </div>
+    </div>
+
+    <div id="battle-log" style="margin-top: 30px; font-size: 0.9rem; color: #888; height: 20px;">The battle begins...</div>
+</div>
+
+<div id="loot-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:200; align-items:center; justify-content:center;">
+    <div style="background:var(--panel); padding:25px; border-radius:15px; border:2px solid var(--accent); width:85%; max-width:400px; text-align:center;">
+        <h2 style="margin-top:0; color:var(--accent);">NEW LOOT!</h2>
+        <div id="item-icon" style="font-size:3rem; margin:10px;">🛡️</div>
+        <h3 id="item-name">Boots</h3>
+        
+        <div style="background:#0f3460; padding:15px; border-radius:10px; margin:15px 0; text-align: center; font-size: 0.9rem;">
+            <p>ATK: <span id="curr-atk">0</span> → <span id="new-atk" style="color:#4ecca3">0</span></p>
+            <p>HP: <span id="curr-hp">0</span> → <span id="new-hp" style="color:#4ecca3">0</span></p>
+            <p>DEF: <span id="curr-def">0</span> → <span id="new-def" style="color:#4ecca3">0</span></p>
+            <p>DODGE: <span id="curr-dodge">0</span> → <span id="new-dodge" style="color:#4ecca3">0</span></p>
+        </div>
+
+        <div style="display:flex; gap:10px;">
+            <button id="equip-btn" style="flex:1; background:#4ecca3;">EQUIP</button>
+            <button id="sell-btn" style="flex:1; background:#888;">SELL (+<span id="sell-price">0</span>💰)</button>
+        </div>
+    </div>
+</div>
+<script src="js/saveManager.js"></script>
+    <script>
+        // Change this one number to resize your board (e.g., 6, 8, 10)
+    const boardDimension = 7;
+       const state = {
+    pos: 0,
+    floor: 1,
+    laps: 0,
+    gold: 0,
+    hp: 100,
+    maxHp: 100,
+    atk: 10,
+    def: 2, // Reduces incoming damage
+    dodge: 5, // % chance to miss
+    luck: 5,
+    boardSize: 24,
+    isMoving: false,
+    inventory: [], 
+    // boardSize is now calculated automatically
+    boardSize: (boardDimension * 4) - 4
+};
+
+// const gridMap = [
+//     // Top Row (0 to 6)
+//     [0,0], [0,1], [0,2], [0,3], [0,4], [0,5], [0,6],
+//     // Right Column (7 to 11)
+//     [1,6], [2,6], [3,6], [4,6], [5,6],
+//     // Bottom Row (12 to 18)
+//     [6,6], [6,5], [6,4], [6,3], [6,2], [6,1], [6,0],
+//     // Left Column (19 to 23)
+//     [5,0], [4,0], [3,0], [2,0], [1,0]
+// ];
+
+// Automatically generates the perimeter coordinates
+function generateGridMap(dim) {
+    let map = [];
+    for (let i = 0; i < dim; i++) map.push([0, i]);             // Top
+    for (let i = 1; i < dim; i++) map.push([i, dim - 1]);     // Right
+    for (let i = dim - 2; i >= 0; i--) map.push([dim - 1, i]); // Bottom
+    for (let i = dim - 2; i >= 1; i--) map.push([i, 0]);       // Left
+    return map;
+}
+
+const gridMap = generateGridMap(boardDimension);
+
+function initBoard() {
+    const boardEl = document.getElementById('board');
+    boardEl.innerHTML = ''; 
+    
+    // Dynamically update the CSS Grid columns/rows
+    boardEl.style.gridTemplateColumns = `repeat(${boardDimension}, 1fr)`;
+    boardEl.style.gridTemplateRows = `repeat(${boardDimension}, 1fr)`;
+
+    // Calculate Boss position (opposite corner of GO)
+    const bossIndex = Math.floor(state.boardSize / 2);
+
+    for (let i = 0; i < state.boardSize; i++) {
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        tile.id = `tile-${i}`;
+        tile.style.gridArea = `${gridMap[i][0] + 1} / ${gridMap[i][1] + 1}`;
+        
+        if (i === 0) {
+            tile.innerText = "GO";
+            tile.style.color = "#4ecca3";
+        } else if (i === bossIndex) {
+            tile.innerText = "👹"; 
+            tile.style.border = "2px solid gold";
+        } else {
+            const types = ['⚔️', '💰', '⚔️', '✨'];
+            tile.innerText = types[Math.floor(Math.random() * types.length)];
+        }
+        boardEl.appendChild(tile);
+    }
+    updatePlayerVisual();
+}
+let isProcessingTile = false;
+
+// 1. VISUAL POLISH: Smooth "Hopping" Movement
+async function playTurn() {
+    if (state.isMoving) return; // Prevent double-clicking
+    isProcessingTile = false; // Reset lock for the new turn
+    state.isMoving = true;
+
+    const roll = Math.floor(Math.random() * 6) + 1;
+    log(`You rolled a ${roll}!`);
+
+    for (let i = 0; i < roll; i++) {
+        state.pos++;
+        
+        // CHECK FOR "GO" (Index 0)
+        if (state.pos >= state.boardSize) {
+            state.pos = 0; 
+            updatePlayerVisual();
+            await handleGoTile(); // Stop at GO
+            // If they stop at GO, we end the movement or continue? 
+            // Usually, in these games, passing GO gives the bonus and you keep going.
+            // To "STOP" at GO, we break the loop:
+            // break; 
+        }
+
+        updatePlayerVisual();
+        await new Promise(r => setTimeout(r, 200)); // 200ms delay per hop
+    }
+
+    state.isMoving = false;
+    handleTileLanding(state.pos);
+}
+
+// 2. THE "GO" TILE LOGIC
+async function handleGoTile() {
+    state.laps++;
+    const healAmount = 10 + (state.floor * 2);
+    state.hp = Math.min(state.maxHp, state.hp + healAmount);
+    log(`Passed GO! Healed ${healAmount} HP.`);
+    
+    if (state.laps >= 3) {
+        openShop(); // Trigger shop every 3 laps
+        state.laps = 0;
+        state.floor++;
+        SaveManager.saveGame(state);
+    }
+    updateUI();
+    await new Promise(r => setTimeout(r, 800)); // Pause to show the heal
+}
+
+// 3. LOOT & EQUIPMENT SYSTEM
+function openLootChest() {
+    // 1. Determine Rarity
+    const luckRoll = Math.random() * 100 + (state.luck || 0);
+    let rarity = { label: "COMMON", color: "#ffffff", mult: 1 };
+    if (luckRoll > 95) rarity = { label: "LEGENDARY", color: "#ffcc00", mult: 2.5 };
+    else if (luckRoll > 80) rarity = { label: "EPIC", color: "#a335ee", mult: 1.8 };
+    else if (luckRoll > 50) rarity = { label: "RARE", color: "#0070dd", mult: 1.3 };
+
+    // 2. Item Pool (Boots now have high Dodge/Defense focus)
+    const itemPool = [
+        { name: "Sword", icon: "⚔️", atk: 5, hp: 0, def: 0, dodge: 0 },
+        { name: "Shield", icon: "🛡️", atk: 0, hp: 30, def: 4, dodge: 0 },
+        { name: "Boots", icon: "🥾", atk: 0, hp: 10, def: 2, dodge: 5 },
+        { name: "Cloak", icon: "🧥", atk: 0, hp: 5, def: 1, dodge: 8 }
+    ];
+
+    const base = itemPool[Math.floor(Math.random() * itemPool.length)];
+    
+    // 3. Rebalanced Scaling
+    const item = {
+        name: `${rarity.label} ${base.name}`,
+        atkBoost: Math.floor(base.atk * state.floor * rarity.mult),
+        hpBoost: Math.floor(base.hp * state.floor * rarity.mult),
+        defBoost: Math.floor(base.def * (1 + state.floor * 0.1) * rarity.mult),
+        dodgeBoost: Math.floor(base.dodge * rarity.mult), // Dodge does NOT scale with Floor
+        value: Math.floor(15 * state.floor * rarity.mult),
+        color: rarity.color,
+        icon: base.icon
+    };
+
+    // 4. Update Modal (Setting the "Current" values correctly)
+    document.getElementById('loot-modal').style.display = 'flex';
+    document.getElementById('item-icon').innerText = item.icon;
+    document.getElementById('item-name').innerText = item.name;
+    document.getElementById('item-name').style.color = item.color;
+    document.getElementById('sell-price').innerText = item.value;
+
+    // Show CURRENT vs NEW
+    document.getElementById('curr-atk').innerText = state.atk;
+    document.getElementById('new-atk').innerText = state.atk + item.atkBoost;
+    document.getElementById('curr-hp').innerText = state.maxHp;
+    document.getElementById('new-hp').innerText = state.maxHp + item.hpBoost;
+    document.getElementById('curr-def').innerText = state.def || 0;
+    document.getElementById('new-def').innerText = (state.def || 0) + item.defBoost;
+    document.getElementById('curr-dodge').innerText = (state.dodge || 0) + "%";
+    document.getElementById('new-dodge').innerText = Math.min(50, (state.dodge || 0) + item.dodgeBoost) + "%";
+
+    // 5. Button Logic (Including Trade-In)
+    const equipBtn = document.getElementById('equip-btn');
+    const sellBtn = document.getElementById('sell-btn');
+    const newEquip = equipBtn.cloneNode(true);
+    const newSell = sellBtn.cloneNode(true);
+    equipBtn.parentNode.replaceChild(newEquip, equipBtn);
+    sellBtn.parentNode.replaceChild(newSell, sellBtn);
+
+    newEquip.onclick = () => {
+        // Trade-in logic: Give 50% value of the new item when replacing old gear
+        state.gold += Math.floor(item.value * 0.5);
+        
+        state.atk += item.atkBoost;
+        state.maxHp += item.hpBoost;
+        state.hp += item.hpBoost; // Heal by the amount max health increased
+        state.def = (state.def || 0) + item.defBoost;
+        state.dodge = Math.min(50, (state.dodge || 0) + item.dodgeBoost); // Cap dodge at 50%
+        closeLoot();
+    };
+
+    newSell.onclick = () => {
+        state.gold += item.value;
+        closeLoot();
+    };
+}
+
+function closeLoot() {
+    SaveManager.saveGame(state);
+    document.getElementById('loot-modal').style.display = 'none';
+    document.getElementById('battle-screen').style.display = 'none'; // Hide battle screen NOW
+    state.isMoving = false;
+    updateUI();
+}
+
+function openShop() {
+    log("--- FLOOR COMPLETE: SHOP OPENED ---");
+    // You can implement a modal here. For now, let's just gift gold for the next floor
+    state.gold += 20;
+    alert(`Floor ${state.floor} reached! Shopkeepers gave you 20 gold.`);
+}
+
+function log(msg) {
+    document.getElementById('log').innerText = msg;
+}
+
+function updateUI() {
+    // 1. Update Text Stats
+    document.getElementById('stat-floor').innerText = state.floor;
+    document.getElementById('stat-lap').innerText = `${state.laps}/3`;
+    document.getElementById('stat-gold').innerText = state.gold;
+    document.getElementById('stat-atk').innerText = state.atk;
+    // New Stats
+    document.getElementById('stat-def').innerText = state.def;
+    document.getElementById('stat-dodge').innerText = state.dodge + "%";
+
+    const hpPercent = (state.hp / state.maxHp) * 100;
+    const bar = document.getElementById('board-hp-bar');
+    bar.style.width = Math.max(0, hpPercent) + "%";
+    document.getElementById('board-hp-text').innerText = `${Math.max(0, state.hp)} / ${state.maxHp}`;
+    
+    // Change bar color if low health
+    bar.style.backgroundColor = hpPercent < 30 ? "#e94560" : "#4ecca3";
+}
+
+function updatePlayerVisual() {
+    const oldToken = document.querySelector('.player-token');
+    if (oldToken) oldToken.remove();
+    const currentTile = document.getElementById(`tile-${state.pos}`);
+    const token = document.createElement('div');
+    token.className = 'player-token';
+    currentTile.appendChild(token);
+}
+
+async function handleTileLanding(index) {
+    if (index === 0) return; // Already handled by handleGoTile
+
+    isProcessingTile = true; // Lock the tile
+    
+   // Check the actual tile content
+    const tile = document.getElementById(`tile-${index}`);
+    const symbol = tile.innerText;
+    
+    if (index === 10 || symbol === '⚔️' || symbol === '👹') {
+        await startBattle(index === 10);
+    } else if (symbol === '💰' || symbol === '✨') {
+        openLootChest();
+    } else {
+        log("A quiet spot... rest while you can.");
+    }
+}
+
+    // isProcessingTile remains true until the player rolls again!
+
+async function startBattle(isBoss = false) {
+    state.isMoving = true;
+    const screen = document.getElementById('battle-screen');
+    const logEl = document.getElementById('battle-log');
+    const nameEl = document.getElementById('enemy-name');
+    
+    screen.style.display = 'flex';
+    
+    // 1. Scale Stats
+    // Scale Stats: Bosses are 2.5x HP and 1.5x ATK
+    const bossMult = isBoss ? 2.5 : 1.0;
+    nameEl.innerText = isBoss ? "👹 FLOOR BOSS" : "⚔️ WILD ENEMY";
+    nameEl.style.color = isBoss ? "#ffcc00" : "var(--accent)";
+
+    // HP increases by 60% per floor (Exponential)
+let eMaxHp = Math.floor(20 * Math.pow(1.6, state.floor - 1) * bossMult);
+let eHp = eMaxHp;
+
+// ATK increases by 30% per floor
+let eAtk = Math.floor(5 * Math.pow(1.3, state.floor - 1) * (isBoss ? 1.5 : 1.0));
+
+    const updateBattleUI = () => {
+        const percent = Math.max(0, (eHp / eMaxHp) * 100);
+        document.getElementById('e-hp-text').innerText = `${Math.max(0, eHp)}/${eMaxHp}`;
+        document.getElementById('e-hp-bar').style.width = (eHp <= 0 ? 0 : percent) + "%";
+        
+        document.getElementById('p-hp-text').innerText = `${state.hp}/${state.maxHp}`;
+        document.getElementById('p-hp-bar').style.width = (state.hp / state.maxHp * 100) + "%";
+    };
+
+    updateBattleUI();
+    await new Promise(r => setTimeout(r, 800));
+
+    // 2. AUTO-FIGHT LOOP
+    while (eHp > 0 && state.hp > 0) {
+        // Player's Turn
+        eHp -= state.atk;
+        updateBattleUI();
+
+        if (eHp <= 0) break; // Exit loop immediately on victory
+
+        await new Promise(r => setTimeout(r, 600));
+
+        // Enemy's Turn
+        let dodgeRoll = Math.random() * 100;
+if (dodgeRoll < state.dodge) {
+    logEl.innerText = "DODGED! 💨"; // Take 0 damage
+} else {
+    // Damage = Enemy ATK minus Hero Defense (Minimum 1 damage)
+    let damageTaken = Math.max(1, eAtk - state.def);
+    state.hp -= damageTaken;
+    logEl.innerText = `Enemy hits for ${damageTaken}!`;
+}
+        updateBattleUI(); 
+        updateUI(); // Updates the main board health bar
+
+        if (state.hp <= 0) break; // Exit loop immediately on defeat
+        await new Promise(r => setTimeout(r, 600));
+    }
+
+    // 3. CONCLUSION (Outside the loop so it only runs once!)
+    if (state.hp <= 0) {
+        alert("GAME OVER - Slain by " + (isBoss ? "the Boss" : "an enemy"));
+        SaveManager.saveGame(state);
+        location.reload();
+    } else {
+        logEl.style.color = "#4ecca3";
+        logEl.innerText = isBoss ? "BOSS DEFEATED!" : "VICTORY!";
+        
+        // Finalize state before loot
+        state.gold += isBoss ? (state.floor * 20) : (state.floor * 5);
+        SaveManager.saveGame(state);
+
+        await new Promise(r => setTimeout(r, 800));
+        openLootChest(); // This will now trigger correctly
+    }
+} // End of startBattle
+
+function startGame() {
+    const savedData = SaveManager.loadGame();
+    if (savedData) {
+        // Overlay the saved data onto our current state
+        Object.assign(state, savedData);
+        // Ensure we aren't stuck in a "moving" state from a bad crash
+        state.isMoving = false; 
+    }
+    initBoard();
+    updateUI();
+}
+
+function initBoard() {
+    const boardEl = document.getElementById('board');
+    boardEl.innerHTML = ''; 
+
+    for (let i = 0; i < state.boardSize; i++) {
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        tile.id = `tile-${i}`;
+        tile.style.gridArea = `${gridMap[i][0] + 1} / ${gridMap[i][1] + 1}`;
+        
+        if (i === 0) {
+            tile.innerText = "GO";
+            tile.style.color = "#4ecca3";
+        } else if (i === 10) {
+            tile.innerText = "👹"; // The Boss Tile
+            tile.style.border = "2px solid gold";
+        } else {
+            const types = ['⚔️', '💰', '⚔️', '✨']; // Weighted toward more combat
+            tile.innerText = types[Math.floor(Math.random() * types.length)];
+        }
+        boardEl.appendChild(tile);
+    }
+    updatePlayerVisual();
+    updateUI();
+}
+
+startGame();
+    </script>
+</body>
+</html>
