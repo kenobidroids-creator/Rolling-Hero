@@ -318,10 +318,10 @@ function openLootChest() {
 
     // 2. Item Pool (Boots now have high Dodge/Defense focus)
     const itemPool = [
-        { name: "Sword", icon: "⚔️", atk: 5, hp: 0, def: 0, dodge: 0 },
-        { name: "Shield", icon: "🛡️", atk: 0, hp: 10, def: 4, dodge: 0 },
-        { name: "Boots", icon: "🥾", atk: 0, hp: 5, def: 2, dodge: 2 },
-        { name: "Cloak", icon: "🧥", atk: 0, hp: 2, def: 1, dodge: 4 }
+        { name: "Sword", icon: "⚔️", atk: 2, hp: 0, def: 0, dodge: 0 },
+        { name: "Shield", icon: "🛡️", atk: 0, hp: 2, def: 2, dodge: 0 },
+        { name: "Boots", icon: "🥾", atk: 0, hp: 1, def: 1, dodge: 2 },
+        { name: "Cloak", icon: "🧥", atk: 0, hp: 4, def: 1, dodge: 1 }
     ];
 
     const base = itemPool[Math.floor(Math.random() * itemPool.length)];
@@ -567,4 +567,5 @@ function initBoard() {
 startGame();
     </script>
 </body>
+
 </html>
